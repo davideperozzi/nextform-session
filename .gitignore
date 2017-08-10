@@ -1,0 +1,7 @@
+/vendor/
+.php_cs.cache
+.idea
+.phpintel
+.DS_Store
+composer.lock
+cghooks.lock
