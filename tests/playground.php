@@ -2,10 +2,10 @@
 
 require realpath(__DIR__ . '/../vendor/autoload.php');
 
-use Nextform\Renderer\Renderer;
-use Nextform\Validation\Validation;
-use Nextform\Session\Session;
 use Nextform\Config\XmlConfig;
+use Nextform\Renderer\Renderer;
+use Nextform\Session\Session;
+use Nextform\Validation\Validation;
 
 $form1 = new XmlConfig('
     <form name="form1" method="GET">
@@ -45,7 +45,7 @@ $form2 = new XmlConfig('
     </form>
 ', true);
 
-echo "<pre>";
+echo '<pre>';
 
 $validator1 = new Validation($form1);
 $validator2 = new Validation($form2);
@@ -57,7 +57,7 @@ $session->setValidation($form1, $validator1);
 $session->setValidation($form2, $validator2);
 
 // Wait for completion
-$session->onComplete(function($data){
+$session->onComplete(function ($data) {
     print_r($data);
     return true;
 });
@@ -66,8 +66,8 @@ $session->proccess();
 
 try {
     echo 'Result: ' . $session->validate();
+} catch (\Exception $exception) {
 }
-catch (\Exception $exception) {}
 
 // Output form
 $renderer1 = new Renderer($form1);

@@ -21,5 +21,5 @@ abstract class AbstractFormDataConstraint
      * @param array $data
      * @return boolean
      */
-    abstract function resolve($data);
+    abstract public function resolve($data);
 }

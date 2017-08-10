@@ -3,8 +3,8 @@
 namespace Nextform\Session;
 
 use Nextform\Config\AbstractConfig;
-use Nextform\Validation\Validation;
 use Nextform\Fields\InputField;
+use Nextform\Validation\Validation;
 
 class Session
 {
@@ -102,7 +102,7 @@ class Session
     {
         $this->validations[] = new Models\ValidationModel($form, $validation);
 
-        $this->onSubmit($form, function($data) use (&$validation){
+        $this->onSubmit($form, function ($data) use (&$validation) {
             $result = $validation->validate($data);
             return $result->isValid();
         });
@@ -110,8 +110,8 @@ class Session
 
     /**
      * @param array $mergeData
-     * @return Nextform\Validation\Models\ResultModel
      * @throws Nextform\Session\Exception\NoValidationFoundException
+     * @return Nextform\Validation\Models\ResultModel
      */
     public function validate($mergeData = [])
     {
@@ -220,8 +220,7 @@ class Session
                         if (count($models) == $valid) {
                             $this->saveData($formId, $data);
                         }
-                    }
-                    else {
+                    } else {
                         $this->saveData($formId, $data);
                     }
                 }
@@ -329,8 +328,7 @@ class Session
 
         if (array_key_exists($id, $this->session->data)) {
             $this->session->data[$id]->merge($data);
-        }
-        else {
+        } else {
             $this->session->data[$id] = new Models\DataModel($data);
         }
 
