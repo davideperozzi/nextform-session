@@ -32,6 +32,7 @@
     },
     "require": {
         "davideperozzi/nextform-config": "^1.0",
-        "davideperozzi/nextform-validator": "^1.0"
+        "davideperozzi/nextform-validator": "^1.0",
+        "davideperozzi/nextform-filehandler": "^1.0"
     }
 }

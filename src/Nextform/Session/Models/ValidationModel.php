@@ -21,7 +21,7 @@ class ValidationModel
      * @param AbstractConfig $form
      * @param Validation $validation
      */
-    public function __construct(AbstractConfig &$form, Validation $validation)
+    public function __construct(AbstractConfig &$form, Validation &$validation)
     {
         $this->form = $form;
         $this->validation = $validation;

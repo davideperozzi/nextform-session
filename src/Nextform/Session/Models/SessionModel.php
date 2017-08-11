@@ -10,6 +10,11 @@ class SessionModel implements \Serializable
     public $id = '';
 
     /**
+     * @var integer
+     */
+    public $created = -1;
+
+    /**
      * @var array
      */
     public $data = [];
@@ -20,6 +25,7 @@ class SessionModel implements \Serializable
     public function __construct($id)
     {
         $this->id = $id;
+        $this->created = time();
     }
 
     /**
@@ -47,6 +53,7 @@ class SessionModel implements \Serializable
         $properties = json_decode($str, true);
 
         $this->id = $properties['id'];
+        $this->created = $properties['created'];
 
         foreach ($properties['data'] as $id => $data) {
             $this->data[$id] = new DataModel($data['data']);

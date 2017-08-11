@@ -6,6 +6,7 @@ use Nextform\Config\XmlConfig;
 use Nextform\Renderer\Renderer;
 use Nextform\Session\Session;
 use Nextform\Validation\Validation;
+use Nextform\FileHandler\FileHandler;
 
 $form1 = new XmlConfig('
     <form name="form1" method="GET">
@@ -50,24 +51,21 @@ echo '<pre>';
 $validator1 = new Validation($form1);
 $validator2 = new Validation($form2);
 
+$fileHandler1 = new FileHandler($form1, __DIR__ . '/assets/temp');
+$fileHandler2 = new FileHandler($form2, __DIR__ . '/assets/temp');
+
 $session = new Session('registration', $form1, $form2);
-$session->completeIfFormDataExists($form1, ['test1']);
-$session->completeIfFormDataExists($form2, ['test2']);
-$session->setValidation($form1, $validator1);
-$session->setValidation($form2, $validator2);
+$session->addValidation($validator1, $validator2);
+$session->addFileHandler($fileHandler1, $fileHandler2);
 
 // Wait for completion
 $session->onComplete(function ($data) {
     print_r($data);
+
     return true;
 });
 
-$session->proccess();
-
-try {
-    echo 'Result: ' . $session->validate();
-} catch (\Exception $exception) {
-}
+echo 'Result: ' . $session->proccess();
 
 // Output form
 $renderer1 = new Renderer($form1);

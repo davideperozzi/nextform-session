@@ -5,19 +5,16 @@ namespace Nextform\Session;
 use Nextform\Config\AbstractConfig;
 use Nextform\Fields\InputField;
 use Nextform\Validation\Validation;
+use Nextform\FileHandler\FileHandler;
 
 class Session
 {
     /**
      * @var string
+     *
      * MD5 hash of nextform_session_id
      */
     const SESSION_FIELD_NAME = '_73d39f2e64de879f0876fdaec6c96a16';
-
-    /**
-     * @var integer
-     */
-    private static $idPrefix = 0;
 
     /**
      * @var string
@@ -48,6 +45,21 @@ class Session
      * @var array
      */
     private $formDataConstraints = [];
+
+    /**
+     * @var array
+     */
+    private $sessionDataFilters = [];
+
+    /**
+     * @var array
+     */
+    private $validations = [];
+
+    /**
+     * @var array
+     */
+    private $fileHandlers = [];
 
     /**
      * @param string $name
@@ -83,7 +95,10 @@ class Session
             $form->addField($idField);
         }
 
-        static::$idPrefix++;
+        // Add filter to remove name field from data before saving
+        $this->filterIfDataContainsKeys([self::SESSION_FIELD_NAME], function(&$data){
+            unset($data[self::SESSION_FIELD_NAME]);
+        });
     }
 
     /**
@@ -95,17 +110,37 @@ class Session
     }
 
     /**
-     * @param AbstractConfig $form
-     * @param Validation $validation
+     * @param array &$validations
      */
-    public function setValidation(AbstractConfig &$form, Validation $validation)
+    public function addValidation(Validation &...$validations)
     {
-        $this->validations[] = new Models\ValidationModel($form, $validation);
+        foreach ($validations as &$validation) {
+            $form = $validation->getConfig();
+            $this->validations[] = new Models\ValidationModel($form, $validation);
 
-        $this->onSubmit($form, function ($data) use (&$validation) {
-            $result = $validation->validate($data);
-            return $result->isValid();
-        });
+            $this->onSubmit($form, function (&$data) use (&$validation) {
+                $result = $validation->validate($data);
+
+                return $result->isValid();
+            });
+        }
+    }
+
+    /**
+     * @param array &$fileHandlers
+     */
+    public function addFileHandler(FileHandler &...$fileHandlers)
+    {
+        foreach ($fileHandlers as &$fileHandler) {
+            $form = $fileHandler->getForm();
+            $this->fileHandlers[] = new Models\FileHandlerModel($form, $fileHandler);
+
+            $this->onSubmit($form, function (&$data) use (&$fileHandler) {
+                $fileHandler->handle($data);
+
+                return true;
+            });
+        }
     }
 
     /**
@@ -192,6 +227,7 @@ class Session
     /**
      * @param array $data
      * @param array
+     * @return Nextform\Validation\Models\ResultModel|null
      */
     public function proccess($mergeData = [])
     {
@@ -220,22 +256,57 @@ class Session
                         if (count($models) == $valid) {
                             $this->saveData($formId, $data);
                         }
+                        else {
+                            $this->clearData($formId);
+                        }
                     } else {
                         $this->saveData($formId, $data);
                     }
                 }
 
                 $fulfilled = true;
-                $valid = 0;
 
-                foreach ($this->formDataConstraints as $constraint) {
-                    if ( ! $constraint->resolve($this->session->data)) {
+                // Check if all forms are given
+                foreach ($this->forms as $id => $form) {
+                    if ( ! array_key_exists($id, $this->session->data)) {
                         $fulfilled = false;
                         break;
                     }
                 }
 
+                // Check if constrains will be resolved
                 if (true == $fulfilled) {
+                    foreach ($this->formDataConstraints as $constraint) {
+                        if ( ! $constraint->resolve($this->session->data)) {
+                            $fulfilled = false;
+                            break;
+                        }
+                    }
+                }
+
+                $valid = 0;
+
+                // All forms appear to be stored in the session
+                // Now revalidate the data, let the user handle the callbacks
+                // and clear the data if everything is correct
+                if (true == $fulfilled) {
+                    // Revalidate data stored in the session to ensure it
+                    // isn't manipulated before resolving this session
+                    foreach ($this->session->data as $id => $formData) {
+                        if (array_key_exists($id, $this->forms)) {
+                            foreach ($this->validations as $model) {
+                                if ($model->form == $this->forms[$id]) {
+                                    $result = $model->validation->validate($formData->data);
+
+                                    if ( ! $result->isValid()) {
+                                        return $result;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Complete callbacks (if they were set)
                     foreach ($this->completeCallbacks as $callback) {
                         $data = [];
 
@@ -252,13 +323,29 @@ class Session
                     }
                 }
 
+                // If all callbacks were valid cleanup the session
                 if ($valid == count($this->completeCallbacks)) {
                     $this->cleanup();
                 }
             }
         }
 
-        return $data;
+        try {
+            return $this->validate();
+        }
+        catch (Exception\NoValidationFoundException $exception) {}
+
+        return null;
+    }
+
+    /**
+     * @param array $keys
+     * @param callable $callback
+     * @return self
+     */
+    public function filterIfDataContainsKeys($keys, callable $callback)
+    {
+        $this->sessionDataFilters[] = new Filters\SessionDataKeyFilter($keys, $callback);
     }
 
     /**
@@ -278,7 +365,7 @@ class Session
         }
 
         if (empty($formId)) {
-            throw new \Exception('Formular not found');
+            throw new \Exception('Formular not found to add constraint on');
         }
 
         $this->formDataConstraints[] = new Constraints\FormDataExistConstraint($formId, $keys);
@@ -318,20 +405,41 @@ class Session
     }
 
     /**
-     * @param array $data
+     * @param string $id
+     * @return boolean
      */
-    private function saveData($id, $data)
+    private function clearData($id)
     {
-        if (array_key_exists(self::SESSION_FIELD_NAME, $data)) {
-            unset($data[self::SESSION_FIELD_NAME]);
+        if (array_key_exists($id, $this->session->data)) {
+            unset($this->session->data[$id]);
+
+            $this->storeSession();
+
+            return true;
         }
 
+        return false;
+    }
+
+    /**
+     * @param string $id
+     * @param array $data
+     */
+    private function saveData($id, array $data)
+    {
+        // Filter session data
+        foreach ($this->sessionDataFilters as $dataFilter) {
+            $dataFilter->filter($data);
+        }
+
+        // Merge or add data to session
         if (array_key_exists($id, $this->session->data)) {
             $this->session->data[$id]->merge($data);
         } else {
             $this->session->data[$id] = new Models\DataModel($data);
         }
 
+        // Save session to cookie
         $this->storeSession();
     }
 
@@ -344,6 +452,6 @@ class Session
 
     private function storeSession()
     {
-        $_SESSION[$this->id] = serialize($this->session);
+        $_SESSION[$this->session->id] = serialize($this->session);
     }
 }
