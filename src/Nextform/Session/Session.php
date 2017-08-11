@@ -34,7 +34,12 @@ class Session
     /**
      * @var array
      */
-    private $submitCallbacks = [];
+    private $beforeSubmitCallbacks = [];
+
+    /**
+     * @var array
+     */
+    private $onSubmitCallbacks = [];
 
     /**
      * @var array
@@ -60,6 +65,11 @@ class Session
      * @var array
      */
     private $fileHandlers = [];
+
+    /**
+     * @var boolean
+     */
+    private $separatedFileUploads = false;
 
     /**
      * @param string $name
@@ -124,6 +134,8 @@ class Session
                 return $result->isValid();
             });
         }
+
+        $this->updateValidationType();
     }
 
     /**
@@ -135,9 +147,17 @@ class Session
             $form = $fileHandler->getForm();
             $this->fileHandlers[] = new Models\FileHandlerModel($form, $fileHandler);
 
+            $this->beforeSubmit($form, function(&$data) use (&$fileHandler, &$form){
+                if ($fileHandler->isActive($data)) {
+                    $this->setValidationType(
+                        Validation::TYPE_ONLY_FILE_VALIDATION,
+                        $form
+                    );
+                }
+            });
+
             $this->onSubmit($form, function (&$data) use (&$fileHandler) {
                 $fileHandler->handle($data);
-
                 return true;
             });
         }
@@ -175,12 +195,25 @@ class Session
     }
 
     /**
+     * @param AbstractConfig &$form
      * @param callable $callback
      * @return self
      */
-    public function onSubmit($form, callable $callback)
+    public function onSubmit(&$form, callable $callback)
     {
-        $this->submitCallbacks[] = new Models\SubmitCallbackModel($form, $callback);
+        $this->onSubmitCallbacks[] = new Models\SubmitCallbackModel($form, $callback);
+
+        return $this;
+    }
+
+    /**
+     * @param AbstractConfig &$form
+     * @param callable $callback
+     * @return self
+     */
+    public function beforeSubmit(&$form, callable $callback)
+    {
+        $this->beforeSubmitCallbacks[] = new Models\SubmitCallbackModel($form, $callback);
 
         return $this;
     }
@@ -240,12 +273,25 @@ class Session
 
             if ($sessionId == $this->session->id) {
                 if (array_key_exists($formId, $this->forms)) {
-                    $models = $this->getSubmitCallbacks($this->forms[$formId]);
+                    $beforeSubmitModels = $this->getSubmitCallbacks(
+                        $this->beforeSubmitCallbacks,
+                        $this->forms[$formId]
+                    );
 
-                    if (count($models) > 0) {
+                    foreach ($beforeSubmitModels as $model) {
+                        $callback = $model->callback;
+                        $callback($data);
+                    }
+
+                    $onSubmitModels = $this->getSubmitCallbacks(
+                        $this->onSubmitCallbacks,
+                        $this->forms[$formId]
+                    );
+
+                    if (count($onSubmitModels) > 0) {
                         $valid = 0;
 
-                        foreach ($models as $model) {
+                        foreach ($onSubmitModels as $model) {
                             $callback = $model->callback;
 
                             if (true == $callback($data)) {
@@ -253,7 +299,7 @@ class Session
                             }
                         }
 
-                        if (count($models) == $valid) {
+                        if (count($onSubmitModels) == $valid) {
                             $this->saveData($formId, $data);
                         } else {
                             $this->clearData($formId);
@@ -331,10 +377,45 @@ class Session
 
         try {
             return $this->validate();
-        } catch (Exception\NoValidationFoundException $exception) {
-        }
+        } catch (Exception\NoValidationFoundException $exception) {}
 
         return null;
+    }
+
+    /**
+     * @param boolean $active
+     */
+    public function enableSeparatedFileUploads($active)
+    {
+        $this->separatedFileUploads = $active;
+        $this->updateValidationType();
+    }
+
+    private function updateValidationType()
+    {
+        if (true == $this->separatedFileUploads) {
+            $this->setValidationType(Validation::TYPE_EXCLUDE_FILE_VALIDATION);
+        }
+        else {
+            $this->setValidationType(Validation::TYPE_DEFAULT);
+        }
+    }
+
+    /**
+     * @param number $type
+     * @param AbstractConfig $form
+     */
+    private function setValidationType($type, AbstractConfig $form = null)
+    {
+        foreach ($this->validations as $model) {
+            if ( ! is_null($form) && $form instanceof $form) {
+                if ($model->form != $form) {
+                    continue;
+                }
+            }
+
+            $model->validation->setType($type);
+        }
     }
 
     /**
@@ -371,20 +452,21 @@ class Session
     }
 
     /**
+     * @param array $models
      * @param AbstractConfig $form
      * @return Models\SubmitCallbackModel
      */
-    private function getSubmitCallbacks(AbstractConfig $form)
+    private function getSubmitCallbacks(array $models, AbstractConfig &$form)
     {
-        $models = [];
+        $result = [];
 
-        foreach ($this->submitCallbacks as $model) {
+        foreach ($models as $model) {
             if ($model->form == $form) {
-                $models[] = $model;
+                $result[] = $model;
             }
         }
 
-        return $models;
+        return $result;
     }
 
     /**
