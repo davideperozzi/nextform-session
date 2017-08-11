@@ -147,7 +147,7 @@ class Session
             $form = $fileHandler->getForm();
             $this->fileHandlers[] = new Models\FileHandlerModel($form, $fileHandler);
 
-            $this->beforeSubmit($form, function(&$data) use (&$fileHandler, &$form){
+            $this->beforeSubmit($form, function (&$data) use (&$fileHandler, &$form) {
                 if ($fileHandler->isActive($data)) {
                     $this->setValidationType(
                         Validation::TYPE_ONLY_FILE_VALIDATION,
@@ -377,7 +377,8 @@ class Session
 
         try {
             return $this->validate();
-        } catch (Exception\NoValidationFoundException $exception) {}
+        } catch (Exception\NoValidationFoundException $exception) {
+        }
 
         return null;
     }
@@ -395,8 +396,7 @@ class Session
     {
         if (true == $this->separatedFileUploads) {
             $this->setValidationType(Validation::TYPE_EXCLUDE_FILE_VALIDATION);
-        }
-        else {
+        } else {
             $this->setValidationType(Validation::TYPE_DEFAULT);
         }
     }
