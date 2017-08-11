@@ -3,10 +3,10 @@
 require realpath(__DIR__ . '/../vendor/autoload.php');
 
 use Nextform\Config\XmlConfig;
+use Nextform\FileHandler\FileHandler;
 use Nextform\Renderer\Renderer;
 use Nextform\Session\Session;
 use Nextform\Validation\Validation;
-use Nextform\FileHandler\FileHandler;
 
 $form1 = new XmlConfig('
     <form name="form1" method="GET">

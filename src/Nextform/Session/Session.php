@@ -4,8 +4,8 @@ namespace Nextform\Session;
 
 use Nextform\Config\AbstractConfig;
 use Nextform\Fields\InputField;
-use Nextform\Validation\Validation;
 use Nextform\FileHandler\FileHandler;
+use Nextform\Validation\Validation;
 
 class Session
 {
@@ -96,7 +96,7 @@ class Session
         }
 
         // Add filter to remove name field from data before saving
-        $this->filterIfDataContainsKeys([self::SESSION_FIELD_NAME], function(&$data){
+        $this->filterIfDataContainsKeys([self::SESSION_FIELD_NAME], function (&$data) {
             unset($data[self::SESSION_FIELD_NAME]);
         });
     }
@@ -255,8 +255,7 @@ class Session
 
                         if (count($models) == $valid) {
                             $this->saveData($formId, $data);
-                        }
-                        else {
+                        } else {
                             $this->clearData($formId);
                         }
                     } else {
@@ -332,8 +331,8 @@ class Session
 
         try {
             return $this->validate();
+        } catch (Exception\NoValidationFoundException $exception) {
         }
-        catch (Exception\NoValidationFoundException $exception) {}
 
         return null;
     }
