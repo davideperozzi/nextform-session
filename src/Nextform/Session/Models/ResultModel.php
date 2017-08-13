@@ -15,7 +15,7 @@ class ResultModel implements \JsonSerializable
     private $removeFiles = true;
 
     /**
-     * @var
+     * @var array
      */
     private $errors = [];
 
@@ -25,6 +25,7 @@ class ResultModel implements \JsonSerializable
     public function jsonSerialize()
     {
         return [
+            'session' => true,
             'valid' => $this->valid,
             'errors' => $this->errors
         ];
