@@ -59,13 +59,17 @@ $session->addValidation($validator1, $validator2);
 $session->addFileHandler($fileHandler1, $fileHandler2);
 
 // Wait for completion
-$session->onComplete(function ($data) {
-    print_r($data);
+$session->onComplete(function ($data, &$result) {
+    if ($data['form2']->data['test2'] != 'test') {
+        $result->addError('Something went wrong');
+    }
 
-    return true;
+    if ($result->isValid()) {
+        print_r('Send data.');
+    }
 });
 
-echo 'Result: ' . $session->proccess();
+echo 'Result: ' . $session->process();
 
 // Output form
 $renderer1 = new Renderer($form1);

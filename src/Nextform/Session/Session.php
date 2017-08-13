@@ -19,6 +19,11 @@ class Session
     /**
      * @var string
      */
+    const SESSION_FIELD_SEPERATOR = ';';
+
+    /**
+     * @var string
+     */
     public $id = '';
 
     /**
@@ -45,11 +50,6 @@ class Session
      * @var array
      */
     private $completeCallbacks = [];
-
-    /**
-     * @var array
-     */
-    private $formDataConstraints = [];
 
     /**
      * @var array
@@ -99,8 +99,8 @@ class Session
             // Add id field
             $idField = new InputField();
             $idField->setAttribute('name', self::SESSION_FIELD_NAME);
-            $idField->setAttribute('value', $this->id . ';' . $id);
-            $idField->setAttribute('hidden', '1');
+            $idField->setAttribute('value', $this->id . self::SESSION_FIELD_SEPERATOR . $id);
+            $idField->setAttribute('hidden', '');
 
             $form->addField($idField);
         }
@@ -109,14 +109,6 @@ class Session
         $this->filterIfDataContainsKeys([self::SESSION_FIELD_NAME], function (&$data) {
             unset($data[self::SESSION_FIELD_NAME]);
         });
-    }
-
-    /**
-     * @return string
-     */
-    public static function createToken()
-    {
-        return bin2hex(random_bytes(8));
     }
 
     /**
@@ -227,10 +219,8 @@ class Session
     {
         $data = $this->getData($mergeData);
 
-        if (array_key_exists(self::SESSION_FIELD_NAME, $data)) {
-            $ids = explode(';', $data[self::SESSION_FIELD_NAME]);
-            $sessionId = $ids[0];
-            $formId = $ids[1];
+        if ($this->isSessionActive($data)) {
+            list($sessionId, $formId) = $this->getNameIdParts($data);
 
             if ($sessionId == $this->session->id) {
                 if (array_key_exists($formId, $this->forms)) {
@@ -245,68 +235,20 @@ class Session
     }
 
     /**
-     * @return array
-     */
-    private function getData($data = [])
-    {
-        return array_merge(
-            $_POST ? $_POST : [],
-            $_GET ? $_GET : [],
-            $_FILES ? $_FILES : [],
-            $data
-        );
-    }
-
-    /**
      * @param array $data
      * @param array
      * @return Nextform\Validation\Models\ResultModel|null
      */
-    public function proccess($mergeData = [])
+    public function process($mergeData = [])
     {
         $data = $this->getData($mergeData);
 
-        if (array_key_exists(self::SESSION_FIELD_NAME, $data)) {
-            $ids = explode(';', $data[self::SESSION_FIELD_NAME]);
-            $sessionId = $ids[0];
-            $formId = $ids[1];
+        if ($this->isSessionActive($data)) {
+            list($sessionId, $formId) = $this->getNameIdParts($data);
 
             if ($sessionId == $this->session->id) {
                 if (array_key_exists($formId, $this->forms)) {
-                    $beforeSubmitModels = $this->getSubmitCallbacks(
-                        $this->beforeSubmitCallbacks,
-                        $this->forms[$formId]
-                    );
-
-                    foreach ($beforeSubmitModels as $model) {
-                        $callback = $model->callback;
-                        $callback($data);
-                    }
-
-                    $onSubmitModels = $this->getSubmitCallbacks(
-                        $this->onSubmitCallbacks,
-                        $this->forms[$formId]
-                    );
-
-                    if (count($onSubmitModels) > 0) {
-                        $valid = 0;
-
-                        foreach ($onSubmitModels as $model) {
-                            $callback = $model->callback;
-
-                            if (true == $callback($data)) {
-                                $valid++;
-                            }
-                        }
-
-                        if (count($onSubmitModels) == $valid) {
-                            $this->saveData($formId, $data);
-                        } else {
-                            $this->clearData($formId);
-                        }
-                    } else {
-                        $this->saveData($formId, $data);
-                    }
+                    $this->processForm($data, $formId);
                 }
 
                 $fulfilled = true;
@@ -318,18 +260,6 @@ class Session
                         break;
                     }
                 }
-
-                // Check if constrains will be resolved
-                if (true == $fulfilled) {
-                    foreach ($this->formDataConstraints as $constraint) {
-                        if ( ! $constraint->resolve($this->session->data)) {
-                            $fulfilled = false;
-                            break;
-                        }
-                    }
-                }
-
-                $valid = 0;
 
                 // All forms appear to be stored in the session
                 // Now revalidate the data, let the user handle the callbacks
@@ -351,6 +281,8 @@ class Session
                         }
                     }
 
+                    $result = new Models\ResultModel();
+
                     // Complete callbacks (if they were set)
                     foreach ($this->completeCallbacks as $callback) {
                         $data = [];
@@ -362,15 +294,15 @@ class Session
                             }
                         }
 
-                        if (true == $callback($data)) {
-                            $valid++;
-                        }
+                        $callback($data, $result);
                     }
-                }
 
-                // If all callbacks were valid cleanup the session
-                if ($valid == count($this->completeCallbacks)) {
-                    $this->cleanup();
+                    // If the result is valid cleanup the session
+                    if ($result->isValid()) {
+                        $this->destroy($result->isRemoveFiles());
+                    }
+
+                    return $result;
                 }
             }
         }
@@ -384,12 +316,103 @@ class Session
     }
 
     /**
+     * @param array &$data
+     * @param string $formId
+     */
+    private function processForm(array &$data, $formId)
+    {
+        $form = $this->forms[$formId];
+
+        $beforeSubmitModels = $this->getSubmitCallbacks(
+            $this->beforeSubmitCallbacks,
+            $form
+        );
+
+        foreach ($beforeSubmitModels as $model) {
+            $callback = $model->callback;
+            $callback($data);
+        }
+
+        $onSubmitModels = $this->getSubmitCallbacks(
+            $this->onSubmitCallbacks,
+            $form
+        );
+
+        if (count($onSubmitModels) > 0) {
+            $valid = 0;
+
+            foreach ($onSubmitModels as $model) {
+                $callback = $model->callback;
+
+                if (true == $callback($data)) {
+                    $valid++;
+                }
+            }
+
+            if (count($onSubmitModels) == $valid) {
+                $this->saveData($formId, $data);
+            } else {
+                $this->clearData($formId);
+            }
+        } else {
+            $this->saveData($formId, $data);
+        }
+    }
+
+    /**
      * @param boolean $active
      */
     public function enableSeparatedFileUploads($active)
     {
         $this->separatedFileUploads = $active;
         $this->updateValidationType();
+    }
+
+    /**
+     * @param array $keys
+     * @param callable $callback
+     * @return self
+     */
+    public function filterIfDataContainsKeys($keys, callable $callback)
+    {
+        $this->sessionDataFilters[] = new Filters\SessionDataKeyFilter($keys, $callback);
+    }
+
+    /**
+     * @param AbstractConfig $form
+     * @return FileHandler
+     */
+    private function getFileHandler(AbstractConfig &$form)
+    {
+        foreach ($this->fileHandlers as &$model) {
+            if ($model->form == $form) {
+                return $model->fileHandler;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param boolean $removeFiles
+     */
+    public function destroy($removeFiles = false)
+    {
+        if (true == $removeFiles) {
+            foreach ($this->session->data as $formId => $model) {
+                if (array_key_exists($formId, $this->forms)) {
+                    $fileHandler = $this->getFileHandler($this->forms[$formId]);
+
+                    if ( ! is_null($fileHandler)) {
+                        $fileHandler->removeFilesByData($model->data);
+                    }
+                }
+            }
+        }
+
+        if (array_key_exists($this->session->id, $_SESSION)) {
+            unset($_SESSION[$this->session->id]);
+        }
     }
 
     private function updateValidationType()
@@ -419,36 +442,34 @@ class Session
     }
 
     /**
-     * @param array $keys
-     * @param callable $callback
-     * @return self
+     * @return array
      */
-    public function filterIfDataContainsKeys($keys, callable $callback)
+    private function getData($data = [])
     {
-        $this->sessionDataFilters[] = new Filters\SessionDataKeyFilter($keys, $callback);
+        return array_merge(
+            $_POST ? $_POST : [],
+            $_GET ? $_GET : [],
+            $_FILES ? $_FILES : [],
+            $data
+        );
     }
 
     /**
-     * @param AbstractConfig $form
-     * @param array $keys
-     * @return self
+     * @param array $data
+     * @return array
      */
-    public function completeIfFormDataExists(AbstractConfig $form, $keys)
+    private function getNameIdParts($data)
     {
-        $formId = '';
+        return explode(self::SESSION_FIELD_SEPERATOR, $data[self::SESSION_FIELD_NAME]);
+    }
 
-        foreach ($this->forms as $id => $value) {
-            if ($value == $form) {
-                $formId = $id;
-                break;
-            }
-        }
-
-        if (empty($formId)) {
-            throw new \Exception('Formular not found to add constraint on');
-        }
-
-        $this->formDataConstraints[] = new Constraints\FormDataExistConstraint($formId, $keys);
+    /**
+     * @param array $data
+     * @return boolean
+     */
+    private function isSessionActive($data)
+    {
+        return array_key_exists(self::SESSION_FIELD_NAME, $data);
     }
 
     /**
@@ -522,13 +543,6 @@ class Session
 
         // Save session to cookie
         $this->storeSession();
-    }
-
-    public function cleanup()
-    {
-        if (array_key_exists($this->session->id, $_SESSION)) {
-            unset($_SESSION[$this->session->id]);
-        }
     }
 
     private function storeSession()
