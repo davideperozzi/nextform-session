@@ -101,6 +101,7 @@ class Session
             $idField->setAttribute('name', self::SESSION_FIELD_NAME);
             $idField->setAttribute('value', $this->id . self::SESSION_FIELD_SEPERATOR . $id);
             $idField->setAttribute('hidden', '');
+            $idField->setGhost(true);
 
             $form->addField($idField);
         }
