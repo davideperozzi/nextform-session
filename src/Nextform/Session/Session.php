@@ -105,12 +105,12 @@ class Session
             $this->forms[$signature] = $form;
         }
 
-        $this->id = self::ID_PREFIX . $name;
+        $this->id = self::createId($name);
         $this->session = $this->restoreSession();
 
-        // Add unique id to forms in this session
-        foreach ($this->forms as $id => $form) {
-            static::addSessionFields($id, $form);
+        // Add form fields to each form
+        foreach ($this->forms as $form) {
+            static::addSessionFields($name, $form);
         }
 
         // Add filter to remove name field from data before saving
@@ -125,9 +125,13 @@ class Session
      */
     public static function addSessionFields($id, AbstractConfig &$form)
     {
+        $value = self::createId($id);
+        $value .= self::SESSION_FIELD_SEPERATOR;
+        $value .= Signature::get($form);
+
         $idField = new InputField();
         $idField->setAttribute('name', self::SESSION_FIELD_NAME);
-        $idField->setAttribute('value', $id . self::SESSION_FIELD_SEPERATOR . $id);
+        $idField->setAttribute('value', $value);
         $idField->setAttribute('hidden', '');
         $idField->setGhost(true);
 
@@ -399,6 +403,15 @@ class Session
     public function filterIfDataContainsKeys($keys, callable $callback)
     {
         $this->sessionDataFilters[] = new Filters\SessionDataKeyFilter($keys, $callback);
+    }
+
+    /**
+     * @param string $slug
+     * @return string
+     */
+    private static function createId($slug)
+    {
+        return self::ID_PREFIX . $slug;
     }
 
     /**
