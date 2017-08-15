@@ -3,12 +3,18 @@
 namespace Nextform\Session;
 
 use Nextform\Config\AbstractConfig;
+use Nextform\Config\Signature;
 use Nextform\Fields\InputField;
 use Nextform\FileHandler\FileHandler;
 use Nextform\Validation\Validation;
 
 class Session
 {
+    /**
+     * @var string
+     */
+    const ID_PREFIX = 'nextform_';
+
     /**
      * @var string
      *
@@ -81,35 +87,51 @@ class Session
             if (false == @session_start()) {
                 throw new Exception\SessionNotStartedException(
                     'Something went wrong while starting the session.
-                    Start it manually and make sure not header was
-                    sent before the session will be started'
+                    Start it manually and make sure no header was
+                    sent before the session is going to be started'
                 );
             }
         }
 
         foreach ($forms as $i =>  $form) {
-            $this->forms['f' . $i] = $form;
+            $signature = Signature::get($form);
+
+            if (array_key_exists($signature, $this->forms)) {
+                throw new Exception\FormularAlreadyInSessionException(
+                    sprintf('Formular "%s" was already added to this session', $signature)
+                );
+            }
+
+            $this->forms[$signature] = $form;
         }
 
-        $this->id = 'nextform_' . $name;
+        $this->id = self::ID_PREFIX . $name;
         $this->session = $this->restoreSession();
 
         // Add unique id to forms in this session
         foreach ($this->forms as $id => $form) {
-            // Add id field
-            $idField = new InputField();
-            $idField->setAttribute('name', self::SESSION_FIELD_NAME);
-            $idField->setAttribute('value', $this->id . self::SESSION_FIELD_SEPERATOR . $id);
-            $idField->setAttribute('hidden', '');
-            $idField->setGhost(true);
-
-            $form->addField($idField);
+            static::addSessionFields($id, $form);
         }
 
         // Add filter to remove name field from data before saving
         $this->filterIfDataContainsKeys([self::SESSION_FIELD_NAME], function (&$data) {
             unset($data[self::SESSION_FIELD_NAME]);
         });
+    }
+
+    /**
+     * @param string $id
+     * @param AbstractConfig &$form
+     */
+    public static function addSessionFields($id, AbstractConfig &$form)
+    {
+        $idField = new InputField();
+        $idField->setAttribute('name', self::SESSION_FIELD_NAME);
+        $idField->setAttribute('value', $id . self::SESSION_FIELD_SEPERATOR . $id);
+        $idField->setAttribute('hidden', '');
+        $idField->setGhost(true);
+
+        $form->addField($idField);
     }
 
     /**
