@@ -247,11 +247,11 @@ class Session
         $data = $this->getData($mergeData);
 
         if ($this->isSessionActive($data)) {
-            list($sessionId, $formId) = $this->getNameIdParts($data);
+            list($sessionId, $signature) = $this->getNameIdParts($data);
 
             if ($sessionId == $this->session->id) {
-                if (array_key_exists($formId, $this->forms)) {
-                    if ($this->forms[$formId] == $form) {
+                if (array_key_exists($signature, $this->forms)) {
+                    if ($signature == Signature::get($form)) {
                         return true;
                     }
                 }
@@ -421,7 +421,10 @@ class Session
     private function getFileHandler(AbstractConfig &$form)
     {
         foreach ($this->fileHandlers as &$model) {
-            if ($model->form == $form) {
+            $sig1 = Signature::get($model->form);
+            $sig2 = Signature::get($form);
+
+            if ($sig1 == $sig2) {
                 return $model->fileHandler;
             }
         }
@@ -468,7 +471,10 @@ class Session
     {
         foreach ($this->validations as $model) {
             if ( ! is_null($form) && $form instanceof $form) {
-                if ($model->form != $form) {
+                $sig1 = Signature::get($model->form);
+                $sig2 = Signature::get($form);
+
+                if ($sig1 != $sig2) {
                     continue;
                 }
             }
@@ -518,7 +524,10 @@ class Session
         $result = [];
 
         foreach ($models as $model) {
-            if ($model->form == $form) {
+            $sig1 = Signature::get($model->form);
+            $sig2 = Signature::get($form);
+
+            if ($sig1 == $sig2) {
                 $result[] = $model;
             }
         }
