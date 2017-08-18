@@ -175,9 +175,10 @@ class Session
                 }
             });
 
-            $this->onSubmit($form, function (&$data) use (&$fileHandler) {
-                $fileHandler->handle($data);
-                return true;
+            $this->onSubmit($form, function (&$data, &$result) use (&$fileHandler) {
+                $fileHandler->handle($data, function ($name, $error) use (&$result, &$fileHandler) {
+                    $result->addError($fileHandler->getErrorMessage($error));
+                });
             });
         }
     }
@@ -264,7 +265,7 @@ class Session
     /**
      * @param array $data
      * @param array
-     * @return Nextform\Validation\Models\ResultModel|null
+     * @return Nextform\Validation\Models\ResultModel|Models\ResultModel|null
      */
     public function process($mergeData = [])
     {
@@ -275,7 +276,11 @@ class Session
 
             if ($sessionId == $this->session->id) {
                 if (array_key_exists($formId, $this->forms)) {
-                    $this->processForm($data, $formId);
+                    $result = $this->processForm($data, $formId);
+
+                    if ( ! $result->isValid()) {
+                        return $result;
+                    }
                 }
 
                 $fulfilled = true;
@@ -345,10 +350,12 @@ class Session
     /**
      * @param array &$data
      * @param string $formId
+     * @return Models\ResultModel
      */
     private function processForm(array &$data, $formId)
     {
         $form = $this->forms[$formId];
+        $result = new Models\ResultModel();
 
         $beforeSubmitModels = $this->getSubmitCallbacks(
             $this->beforeSubmitCallbacks,
@@ -366,17 +373,12 @@ class Session
         );
 
         if (count($onSubmitModels) > 0) {
-            $valid = 0;
-
             foreach ($onSubmitModels as $model) {
                 $callback = $model->callback;
-
-                if (true == $callback($data)) {
-                    $valid++;
-                }
+                $callback($data, $result);
             }
 
-            if (count($onSubmitModels) == $valid) {
+            if ($result->isValid()) {
                 $this->saveData($formId, $data);
             } else {
                 $this->clearData($formId);
@@ -384,6 +386,8 @@ class Session
         } else {
             $this->saveData($formId, $data);
         }
+
+        return $result;
     }
 
     /**
