@@ -20,6 +20,11 @@ class SessionModel implements \Serializable
     public $data = [];
 
     /**
+     * @var array
+     */
+    public $submittedFileForms = [];
+
+    /**
      * @param string $id
      */
     public function __construct($id)
@@ -54,6 +59,9 @@ class SessionModel implements \Serializable
 
         $this->id = $properties['id'];
         $this->created = $properties['created'];
+        $this->submittedFileForms = array_key_exists('submittedFileForms', $properties)
+            ? $properties['submittedFileForms']
+            : [];
 
         foreach ($properties['data'] as $id => $data) {
             $this->data[$id] = new DataModel($data['data']);

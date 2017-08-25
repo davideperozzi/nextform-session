@@ -12,7 +12,17 @@ class ResultModel implements \JsonSerializable
     /**
      * @var boolean
      */
+    private $complete = false;
+
+    /**
+     * @var boolean
+     */
     private $removeFiles = true;
+
+    /**
+     * @var boolean
+     */
+    private $completeLocked = false;
 
     /**
      * @var array
@@ -26,6 +36,7 @@ class ResultModel implements \JsonSerializable
     {
         return [
             'session' => true,
+            'complete' => $this->complete,
             'valid' => $this->valid,
             'errors' => $this->errors
         ];
@@ -62,6 +73,37 @@ class ResultModel implements \JsonSerializable
     public function isValid()
     {
         return $this->valid;
+    }
+
+    /**
+     * @param boolean $complete
+     */
+    public function setComplete($complete)
+    {
+        if (true == $this->completeLocked) {
+            throw new Exception\CompletionLockedException(
+                'This operation is not permitted.
+                The result was already locked'
+            );
+        }
+
+        $this->complete = $complete;
+    }
+
+    /**
+     * @param boolean $locked
+     */
+    public function lockComplete($locked)
+    {
+        $this->completeLocked = $locked;
+    }
+
+    /**
+     * @return boolean
+     */
+    public function isComplete()
+    {
+        return $this->valid && $this->complete;
     }
 
     /**

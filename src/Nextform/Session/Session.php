@@ -60,6 +60,11 @@ class Session
     /**
      * @var array
      */
+    private $beforeCompleteCallbacks = [];
+
+    /**
+     * @var array
+     */
     private $sessionDataFilters = [];
 
     /**
@@ -175,10 +180,22 @@ class Session
                 }
             });
 
-            $this->onSubmit($form, function (&$data, &$result) use (&$fileHandler) {
-                $fileHandler->handle($data, function ($name, $error) use (&$result, &$fileHandler) {
-                    $result->addError($fileHandler->getErrorMessage($error));
-                });
+            $this->onSubmit($form, function (&$data, &$result) use (&$fileHandler, &$form) {
+                if ($fileHandler->isActive($data)) {
+                    $this->session->submittedFileForms[] = Signature::get($form);
+
+                    $fileHandler->handle($data, function ($name, $error) use (&$result, &$fileHandler) {
+                        $result->addError($fileHandler->getErrorMessage($error));
+                    });
+                }
+            });
+
+            $this->beforeComplete(function (&$data, &$result) use (&$fileHandler, &$form) {
+                $signature = Signature::get($form);
+
+                if ( ! in_array($signature, $this->session->submittedFileForms)) {
+                    $result->setComplete(false);
+                }
             });
         }
     }
@@ -210,6 +227,17 @@ class Session
     public function onComplete(callable $callback)
     {
         $this->completeCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * @param callable $callback
+     * @return self
+     */
+    public function beforeComplete(callable $callback)
+    {
+        $this->beforeCompleteCallbacks[] = $callback;
 
         return $this;
     }
@@ -273,7 +301,6 @@ class Session
 
         if ($this->isSessionActive($data)) {
             list($sessionId, $formId) = $this->getNameIdParts($data);
-
             if ($sessionId == $this->session->id) {
                 if (array_key_exists($formId, $this->forms)) {
                     $result = $this->processForm($data, $formId);
@@ -314,24 +341,35 @@ class Session
                     }
 
                     $result = new Models\ResultModel();
+                    $result->setComplete(true);
 
-                    // Complete callbacks (if they were set)
-                    foreach ($this->completeCallbacks as $callback) {
-                        $data = [];
+                    // Transform data
+                    $combinedData = [];
 
-                        foreach ($this->session->data as $id => $values) {
-                            if (array_key_exists($id, $this->forms)) {
-                                $root = $this->forms[$id]->getFields()->getRoot();
-                                $data[$root->id] = $values;
-                            }
+                    foreach ($this->session->data as $id => $values) {
+                        if (array_key_exists($id, $this->forms)) {
+                            $root = $this->forms[$id]->getFields()->getRoot();
+                            $combinedData[$root->id] = $values;
                         }
-
-                        $callback($data, $result);
                     }
 
-                    // If the result is valid cleanup the session
-                    if ($result->isValid()) {
-                        $this->destroy($result->isRemoveFiles());
+                    // Complete callbacks (if they were set)
+                    foreach ($this->beforeCompleteCallbacks as $callback) {
+                        $callback($combinedData, $result);
+                    }
+
+                    // Complete callbacks (if they were set)
+                    if ($result->isComplete()) {
+                        $result->lockComplete(true);
+
+                        foreach ($this->completeCallbacks as $callback) {
+                            $callback($combinedData, $result);
+                        }
+
+                        // If the result is valid cleanup the session
+                        if ($result->isValid()) {
+                            $this->destroy($result->isRemoveFiles());
+                        }
                     }
 
                     return $result;
