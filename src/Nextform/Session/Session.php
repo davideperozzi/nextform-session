@@ -395,6 +395,13 @@ class Session
         $form = $this->forms[$formId];
         $result = new Models\ResultModel();
 
+        if ($form->isCsrfTokenEnabled() && ! $form->checkCsrfToken($data)) {
+            // Prevent any further output and
+            // set repsonse header status to 500
+            http_response_code(500);
+            exit;
+        }
+
         $beforeSubmitModels = $this->getSubmitCallbacks(
             $this->beforeSubmitCallbacks,
             $form
@@ -435,6 +442,17 @@ class Session
     {
         $this->separatedFileUploads = $active;
         $this->updateValidationType();
+    }
+
+    /**
+     * @param boolean $enbale
+     * @return
+     */
+    public function enableCsrfToken($enable = true)
+    {
+        foreach ($this->forms as $form) {
+            $form->enableCsrfToken($enable);
+        }
     }
 
     /**
